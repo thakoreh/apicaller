@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { parseUrl, buildCurlCommand, COMMON_HEADERS } from '@/lib/url';
+import { parseUrl, buildCurlCommand, buildFetchCode, COMMON_HEADERS } from '@/lib/url';
 import { Copy, Check, Zap, Globe, Code2, Terminal } from 'lucide-react';
 
 const METHODS = [
@@ -41,6 +41,7 @@ export default function HomePage() {
   const [body, setBody] = useState('');
   const [copied, setCopied] = useState(false);
   const [showAllMethods, setShowAllMethods] = useState(false);
+  const [outputFormat, setOutputFormat] = useState<'curl' | 'fetch'>('curl');
 
   const parsed = parseUrl(urlInput);
   const fullUrl = parsed.isValid
@@ -48,7 +49,9 @@ export default function HomePage() {
     : urlInput.startsWith('http') ? urlInput : '';
 
   const curlCommand = parsed.isValid
-    ? buildCurlCommand(selectedMethod, fullUrl, headers, body)
+    ? outputFormat === 'fetch'
+      ? buildFetchCode(selectedMethod, fullUrl, headers, body)
+      : buildCurlCommand(selectedMethod, fullUrl, headers, body)
     : '# Enter a valid URL above to generate a curl command';
 
   const addHeader = () => setHeaders((h) => [...h, { key: '', value: '' }]);
@@ -245,17 +248,42 @@ export default function HomePage() {
                     {parsed.isValid ? parsed.pathname || '/' : '...'}
                   </span>
                 </div>
-                <button
-                  onClick={copyCommand}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    copied
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30'
-                  }`}
-                >
-                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Output format toggle */}
+                  <div className="flex items-center rounded-lg border border-white/10 overflow-hidden">
+                    <button
+                      onClick={() => setOutputFormat('curl')}
+                      className={`px-2.5 py-1 text-xs font-mono transition-colors ${
+                        outputFormat === 'curl'
+                          ? 'bg-cyan-500/20 text-cyan-400 border-r border-white/10'
+                          : 'text-white/40 hover:text-white/70'
+                      }`}
+                    >
+                      curl
+                    </button>
+                    <button
+                      onClick={() => setOutputFormat('fetch')}
+                      className={`px-2.5 py-1 text-xs font-mono transition-colors ${
+                        outputFormat === 'fetch'
+                          ? 'bg-cyan-500/20 text-cyan-400'
+                          : 'text-white/40 hover:text-white/70'
+                      }`}
+                    >
+                      fetch()
+                    </button>
+                  </div>
+                  <button
+                    onClick={copyCommand}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      copied
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30'
+                    }`}
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
               </div>
               <pre className="font-mono text-xs text-white/70 leading-relaxed overflow-x-auto whitespace-pre-wrap break-all">
                 {curlCommand}
