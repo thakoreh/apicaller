@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { parseUrl, buildCurlCommand, buildFetchCode, COMMON_HEADERS } from '@/lib/url';
-import { Copy, Check, Zap, Globe, Code2, Terminal } from 'lucide-react';
+import { Copy, Check, Zap, Globe, Code2, Terminal, Sun, Moon, Clock, Sparkles } from 'lucide-react';
 
 const METHODS = [
   { method: 'GET', label: 'GET', color: 'emerald' },
@@ -34,7 +34,150 @@ const COLOR_BORDER: Record<string, string> = {
   slate: 'border-slate-500 text-slate-600',
 };
 
+interface Preset {
+  name: string;
+  url: string;
+  method: string;
+  headers: { key: string; value: string }[];
+  body?: string;
+}
+
+const API_PRESETS: Preset[] = [
+  {
+    name: 'GitHub',
+    url: 'api.github.com/users/octocat',
+    method: 'GET',
+    headers: [
+      { key: 'Accept', value: 'application/vnd.github.v3+json' },
+      { key: 'Authorization', value: 'Bearer YOUR_GITHUB_TOKEN' },
+    ],
+  },
+  {
+    name: 'Stripe',
+    url: 'api.stripe.com/v1/charges',
+    method: 'POST',
+    headers: [
+      { key: 'Content-Type', value: 'application/x-www-form-urlencoded' },
+      { key: 'Authorization', value: 'Bearer sk_test_YOUR_KEY' },
+    ],
+    body: 'amount=2000&currency=usd&source=tok_visa&description=Test charge',
+  },
+  {
+    name: 'OpenAI',
+    url: 'api.openai.com/v1/chat/completions',
+    method: 'POST',
+    headers: [
+      { key: 'Content-Type', value: 'application/json' },
+      { key: 'Authorization', value: 'Bearer YOUR_OPENAI_KEY' },
+    ],
+    body: '{\n  "model": "gpt-4",\n  "messages": [{"role": "user", "content": "Hello!"}]\n}',
+  },
+];
+
+const TYPEWRITER_PHRASES = [
+  'Stop digging through docs.',
+  'Paste an endpoint, pick your method, copy the code.',
+  'From URL to production-ready request in seconds.',
+  'Works with any REST API — public or private.',
+];
+
+function useTheme() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('apicaller-theme') as 'dark' | 'light' | null;
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('apicaller-theme', next);
+      document.documentElement.setAttribute('data-theme', next);
+      return next;
+    });
+  }, []);
+
+  return { theme, toggleTheme };
+}
+
+function useUrlHistory() {
+  const [history, setHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('apicaller-url-history');
+      if (saved) setHistory(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  const addToHistory = useCallback((url: string) => {
+    if (!url.trim()) return;
+    setHistory((prev) => {
+      const filtered = prev.filter((u) => u !== url);
+      const next = [url, ...filtered].slice(0, 10);
+      localStorage.setItem('apicaller-url-history', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const removeFromHistory = useCallback((url: string) => {
+    setHistory((prev) => {
+      const next = prev.filter((u) => u !== url);
+      localStorage.setItem('apicaller-url-history', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    localStorage.removeItem('apicaller-url-history');
+  }, []);
+
+  return { history, addToHistory, removeFromHistory, clearHistory };
+}
+
+function TypewriterText({ phrases }: { phrases: string[] }) {
+  const [text, setText] = useState('');
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const currentPhrase = phrases[phraseIndex];
+    const timeout = isDeleting ? 30 : 60;
+
+    const timer = setTimeout(() => {
+      if (!isDeleting) {
+        setText(currentPhrase.slice(0, text.length + 1));
+        if (text.length + 1 === currentPhrase.length) {
+          setTimeout(() => setIsDeleting(true), 2000);
+        }
+      } else {
+        setText(currentPhrase.slice(0, text.length - 1));
+        if (text.length === 0) {
+          setIsDeleting(false);
+          setPhraseIndex((prev) => (prev + 1) % phrases.length);
+        }
+      }
+    }, timeout);
+
+    return () => clearTimeout(timer);
+  }, [text, isDeleting, phraseIndex, phrases]);
+
+  return (
+    <span>
+      {text}
+      <span className="animate-pulse text-cyan-400">|</span>
+    </span>
+  );
+}
+
 export default function HomePage() {
+  const { theme, toggleTheme } = useTheme();
+  const { history, addToHistory, removeFromHistory, clearHistory } = useUrlHistory();
   const [urlInput, setUrlInput] = useState('');
   const [selectedMethod, setSelectedMethod] = useState('GET');
   const [headers, setHeaders] = useState(COMMON_HEADERS);
@@ -42,6 +185,9 @@ export default function HomePage() {
   const [copied, setCopied] = useState(false);
   const [showAllMethods, setShowAllMethods] = useState(false);
   const [outputFormat, setOutputFormat] = useState<'curl' | 'fetch'>('curl');
+  const [showHistory, setShowHistory] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = parseUrl(urlInput);
   const fullUrl = parsed.isValid
@@ -73,79 +219,171 @@ export default function HomePage() {
     });
   };
 
+  const applyPreset = (preset: Preset) => {
+    setUrlInput(preset.url);
+    setSelectedMethod(preset.method);
+    setHeaders(preset.headers);
+    if (preset.body) setBody(preset.body);
+    setShowPresets(false);
+  };
+
+  const handleSubmit = () => {
+    if (parsed.isValid && urlInput.trim()) {
+      addToHistory(urlInput.trim());
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
       {/* Header */}
-      <header className="border-b border-white/10">
+      <header className="border-b border-[var(--surface-border)]">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Terminal className="w-5 h-5 text-cyan-400" />
             <span className="font-semibold text-sm tracking-wide">
               <span className="text-cyan-400">api</span>
-              <span className="text-white/80">caller</span>
-              <span className="text-white/40">.dev</span>
+              <span className="text-[var(--text-secondary)]">caller</span>
+              <span className="text-[var(--text-muted)]">.dev</span>
             </span>
           </div>
-          <a
-            href="https://github.com/thakoreh/apicaller"
-            className="text-xs text-white/40 hover:text-white/70 transition-colors"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open on GitHub
-          </a>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg border border-[var(--surface-border)] bg-[var(--surface)] hover:bg-white/10 transition-all"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-slate-600" />
+              )}
+            </button>
+            <a
+              href="https://github.com/thakoreh/apicaller"
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open on GitHub
+            </a>
+          </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="px-6 pt-16 pb-12 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 text-xs mb-6">
-          <Zap className="w-3 h-3" />
-          Paste any API URL — get every curl command instantly
+      {/* Hero with animated orbs */}
+      <section className="px-6 pt-16 pb-12 text-center relative overflow-hidden">
+        {/* Floating gradient orbs */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+          <div className="absolute top-10 left-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl animate-[float1_8s_ease-in-out_infinite]" />
+          <div className="absolute top-20 right-1/4 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl animate-[float2_10s_ease-in-out_infinite]" />
+          <div className="absolute bottom-0 left-1/2 w-56 h-56 bg-violet-500/8 rounded-full blur-3xl animate-[float3_12s_ease-in-out_infinite]" />
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">
-          <span className="text-white">API calls, </span>
-          <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-            no guesswork
-          </span>
-        </h1>
-        <p className="text-white/50 text-lg max-w-xl mx-auto">
-          Stop digging through docs. Paste an endpoint, pick your method, copy the curl.
-        </p>
+
+        <div className="relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 text-xs mb-6">
+            <Zap className="w-3 h-3" />
+            Paste any API URL — get every curl command instantly
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">
+            <span className="text-[var(--text-primary)]">API calls, </span>
+            <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              no guesswork
+            </span>
+          </h1>
+          <p className="text-[var(--text-muted)] text-lg max-w-xl mx-auto">
+            <TypewriterText phrases={TYPEWRITER_PHRASES} />
+          </p>
+        </div>
       </section>
 
       {/* Main tool */}
-      <main className="max-w-5xl mx-auto px-6 pb-20">
-        {/* URL input */}
-        <div className="mb-6">
-          <div className="flex items-center gap-0 rounded-xl overflow-hidden border border-white/10 bg-white/5 focus-within:border-cyan-500/50 transition-colors">
+      <main className="max-w-5xl mx-auto px-6 pb-20 relative z-10">
+        {/* API Presets */}
+        <div className="mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[var(--text-muted)] text-xs">
+              <Sparkles className="w-3 h-3 inline mr-1" />
+              Quick presets:
+            </span>
+            {API_PRESETS.map((preset) => (
+              <button
+                key={preset.name}
+                onClick={() => applyPreset(preset)}
+                className="px-3 py-1 rounded-lg text-xs font-medium border border-[var(--surface-border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-cyan-500/30 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all"
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* URL input with history */}
+        <div className="mb-6 relative">
+          <div className="flex items-center gap-0 rounded-xl overflow-hidden border border-[var(--surface-border)] bg-[var(--surface)] focus-within:border-cyan-500/50 transition-colors">
             <div className="pl-4 pr-2 py-3 flex items-center gap-2">
-              <Globe className="w-4 h-4 text-white/40 flex-shrink-0" />
+              <Globe className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
               <select
                 value={parsed.isValid ? parsed.protocol : 'https'}
                 onChange={() => {}}
-                className="bg-transparent text-white/60 text-sm outline-none cursor-pointer pr-2"
+                className="bg-transparent text-[var(--text-muted)] text-sm outline-none cursor-pointer pr-2"
               >
                 <option value="https">https://</option>
                 <option value="http">http://</option>
               </select>
             </div>
             <input
+              ref={urlInputRef}
               type="text"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
+              onFocus={() => { if (history.length > 0 && !urlInput) setShowHistory(true); }}
+              onBlur={() => setTimeout(() => setShowHistory(false), 200)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
               placeholder="api.github.com/users/octocat"
-              className="flex-1 bg-transparent text-white text-sm py-3 pr-4 outline-none placeholder:text-white/20"
+              className="flex-1 bg-transparent text-[var(--text-primary)] text-sm py-3 pr-4 outline-none placeholder:text-[var(--text-muted)]"
             />
           </div>
           {urlInput && !parsed.isValid && (
             <p className="text-red-400 text-xs mt-2 pl-1">Enter a valid URL</p>
           )}
+
+          {/* URL History dropdown */}
+          {showHistory && history.length > 0 && (
+            <div className="url-history-dropdown border border-[var(--surface-border)] bg-[var(--background)] rounded-b-xl shadow-lg mt-0 animate-fade-in">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--surface-border)]">
+                <span className="text-[var(--text-muted)] text-xs flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Recent URLs
+                </span>
+                <button
+                  onClick={clearHistory}
+                  className="text-[var(--text-muted)] text-xs hover:text-red-400 transition-colors"
+                >
+                  Clear all
+                </button>
+              </div>
+              {history.map((url, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between px-4 py-2 hover:bg-[var(--surface)] cursor-pointer group"
+                  onMouseDown={() => { setUrlInput(url); setShowHistory(false); }}
+                >
+                  <span className="text-xs font-mono text-[var(--text-secondary)] truncate flex-1">{url}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeFromHistory(url); }}
+                    className="text-[var(--text-muted)] hover:text-red-400 text-xs px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onMouseDown={(e) => { e.stopPropagation(); removeFromHistory(url); }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Method selector */}
         <div className="flex items-center gap-2 flex-wrap mb-6">
-          <span className="text-white/40 text-xs w-16">METHOD</span>
+          <span className="text-[var(--text-muted)] text-xs w-16">METHOD</span>
           {(showAllMethods ? METHODS : METHODS.slice(0, 4)).map(({ method, color }) => (
             <button
               key={method}
@@ -153,7 +391,7 @@ export default function HomePage() {
               className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
                 selectedMethod === method
                   ? `${COLOR_MAP[color]} border border-current`
-                  : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white border border-transparent'
+                  : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] border border-transparent'
               }`}
             >
               {method}
@@ -161,7 +399,7 @@ export default function HomePage() {
           ))}
           <button
             onClick={() => setShowAllMethods(!showAllMethods)}
-            className="text-white/30 text-xs px-2 py-1 hover:text-white/60 transition-colors"
+            className="text-[var(--text-muted)] text-xs px-2 py-1 hover:text-[var(--text-secondary)] transition-colors"
           >
             {showAllMethods ? '− less' : '+ more'}
           </button>
@@ -171,11 +409,11 @@ export default function HomePage() {
           {/* Left: config */}
           <div className="lg:col-span-3 space-y-5">
             {/* Headers */}
-            <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+            <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-white">Headers</h3>
-                  <p className="text-white/30 text-xs mt-0.5">Common headers — edit or add more</p>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Headers</h3>
+                  <p className="text-[var(--text-muted)] text-xs mt-0.5">Common headers — edit or add more</p>
                 </div>
                 <button
                   onClick={fillAuth}
@@ -192,18 +430,18 @@ export default function HomePage() {
                       value={h.key}
                       onChange={(e) => updateHeader(i, 'key', e.target.value)}
                       placeholder="Header"
-                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-cyan-500/50 placeholder:text-white/20"
+                      className="flex-1 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
                     />
                     <input
                       type="text"
                       value={h.value}
                       onChange={(e) => updateHeader(i, 'value', e.target.value)}
                       placeholder="Value"
-                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-cyan-500/50 placeholder:text-white/20"
+                      className="flex-1 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
                     />
                     <button
                       onClick={() => removeHeader(i)}
-                      className="text-white/20 hover:text-red-400 transition-colors text-xs px-1"
+                      className="text-[var(--text-muted)] hover:text-red-400 transition-colors text-xs px-1"
                     >
                       ×
                     </button>
@@ -212,7 +450,7 @@ export default function HomePage() {
               </div>
               <button
                 onClick={addHeader}
-                className="mt-3 text-xs text-white/30 hover:text-white/60 transition-colors"
+                className="mt-3 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
               >
                 + Add header
               </button>
@@ -220,17 +458,17 @@ export default function HomePage() {
 
             {/* Body */}
             {selectedMethod !== 'GET' && selectedMethod !== 'HEAD' && (
-              <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+              <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-5">
                 <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-white">Request Body</h3>
-                  <p className="text-white/30 text-xs mt-0.5">JSON body for POST/PUT/PATCH</p>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Request Body</h3>
+                  <p className="text-[var(--text-muted)] text-xs mt-0.5">JSON body for POST/PUT/PATCH</p>
                 </div>
                 <textarea
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   placeholder={'{\n  "key": "value"\n}'}
                   rows={5}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-xs text-white font-mono outline-none focus:border-cyan-500/50 placeholder:text-white/20 resize-none"
+                  className="w-full bg-white/5 border border-[var(--surface-border)] rounded-lg px-4 py-3 text-xs text-[var(--text-primary)] font-mono outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)] resize-none"
                 />
               </div>
             )}
@@ -238,25 +476,25 @@ export default function HomePage() {
 
           {/* Right: output */}
           <div className="lg:col-span-2">
-            <div className="rounded-xl border border-cyan-500/20 bg-[#0d1117] p-5 sticky top-6">
+            <div className="rounded-xl border border-cyan-500/20 bg-[var(--code-bg)] p-5 sticky top-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${selectedMethod === 'GET' ? 'bg-emerald-500/20 text-emerald-400' : selectedMethod === 'POST' ? 'bg-blue-500/20 text-blue-400' : selectedMethod === 'PUT' ? 'bg-amber-500/20 text-amber-400' : selectedMethod === 'PATCH' ? 'bg-violet-500/20 text-violet-400' : selectedMethod === 'DELETE' ? 'bg-red-500/20 text-red-400' : 'bg-white/10 text-white/60'}`}>
+                  <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${selectedMethod === 'GET' ? 'bg-emerald-500/20 text-emerald-400' : selectedMethod === 'POST' ? 'bg-blue-500/20 text-blue-400' : selectedMethod === 'PUT' ? 'bg-amber-500/20 text-amber-400' : selectedMethod === 'PATCH' ? 'bg-violet-500/20 text-violet-400' : selectedMethod === 'DELETE' ? 'bg-red-500/20 text-red-400' : 'bg-white/10 text-[var(--text-muted)]'}`}>
                     {selectedMethod}
                   </span>
-                  <span className="text-xs text-white/40 font-mono truncate max-w-[140px]">
+                  <span className="text-xs text-[var(--text-muted)] font-mono truncate max-w-[140px]">
                     {parsed.isValid ? parsed.pathname || '/' : '...'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Output format toggle */}
-                  <div className="flex items-center rounded-lg border border-white/10 overflow-hidden">
+                  <div className="flex items-center rounded-lg border border-[var(--surface-border)] overflow-hidden">
                     <button
                       onClick={() => setOutputFormat('curl')}
                       className={`px-2.5 py-1 text-xs font-mono transition-colors ${
                         outputFormat === 'curl'
-                          ? 'bg-cyan-500/20 text-cyan-400 border-r border-white/10'
-                          : 'text-white/40 hover:text-white/70'
+                          ? 'bg-cyan-500/20 text-cyan-400 border-r border-[var(--surface-border)]'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                       }`}
                     >
                       curl
@@ -266,7 +504,7 @@ export default function HomePage() {
                       className={`px-2.5 py-1 text-xs font-mono transition-colors ${
                         outputFormat === 'fetch'
                           ? 'bg-cyan-500/20 text-cyan-400'
-                          : 'text-white/40 hover:text-white/70'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                       }`}
                     >
                       fetch()
@@ -285,38 +523,38 @@ export default function HomePage() {
                   </button>
                 </div>
               </div>
-              <pre className="font-mono text-xs text-white/70 leading-relaxed overflow-x-auto whitespace-pre-wrap break-all">
+              <pre className="font-mono text-xs text-[var(--text-secondary)] leading-relaxed overflow-x-auto whitespace-pre-wrap break-all">
                 {curlCommand}
               </pre>
             </div>
 
             {/* Quick tips */}
             {parsed.isValid && (
-              <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
-                <h4 className="text-xs font-semibold text-white/60 mb-2 flex items-center gap-1.5">
+              <div className="mt-4 rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-4">
+                <h4 className="text-xs font-semibold text-[var(--text-muted)] mb-2 flex items-center gap-1.5">
                   <Code2 className="w-3.5 h-3.5" />
                   Endpoint info
                 </h4>
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-white/40">Host</span>
-                    <span className="text-white/70 font-mono">{parsed.host}</span>
+                    <span className="text-[var(--text-muted)]">Host</span>
+                    <span className="text-[var(--text-secondary)] font-mono">{parsed.host}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-white/40">Path</span>
-                    <span className="text-white/70 font-mono">{parsed.pathname || '/'}</span>
+                    <span className="text-[var(--text-muted)]">Path</span>
+                    <span className="text-[var(--text-secondary)] font-mono">{parsed.pathname || '/'}</span>
                   </div>
                   {parsed.search && (
                     <div className="flex justify-between">
-                      <span className="text-white/40">Query</span>
-                      <span className="text-white/70 font-mono text-right max-w-[180px] truncate">
+                      <span className="text-[var(--text-muted)]">Query</span>
+                      <span className="text-[var(--text-secondary)] font-mono text-right max-w-[180px] truncate">
                         {parsed.search}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-white/40">Protocol</span>
-                    <span className="text-white/70 font-mono">{parsed.protocol.toUpperCase()}</span>
+                    <span className="text-[var(--text-muted)]">Protocol</span>
+                    <span className="text-[var(--text-secondary)] font-mono">{parsed.protocol.toUpperCase()}</span>
                   </div>
                 </div>
               </div>
@@ -326,17 +564,17 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 mt-auto">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between text-xs text-white/30">
+      <footer className="border-t border-[var(--surface-border)] mt-auto">
+        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between text-xs text-[var(--text-muted)]">
           <span>
             <span className="text-cyan-400">apicaller</span>.dev — built for devs who hate docs
           </span>
           <span>
-            <a href="https://github.com/thakoreh/apicaller" className="hover:text-white/60 transition-colors">
+            <a href="https://github.com/thakoreh/apicaller" className="hover:text-[var(--text-secondary)] transition-colors">
               GitHub
             </a>
             {' · '}
-            <a href="https://www.producthunt.com" className="hover:text-white/60 transition-colors">
+            <a href="https://www.producthunt.com" className="hover:text-[var(--text-secondary)] transition-colors">
               Product Hunt
             </a>
           </span>
