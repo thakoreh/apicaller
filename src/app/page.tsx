@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { parseUrl, buildCurlCommand, buildFetchCode, COMMON_HEADERS } from '@/lib/url';
-import { Copy, Check, Zap, Globe, Code2, Terminal, Sun, Moon, Clock, Sparkles } from 'lucide-react';
+import { Copy, Check, Zap, Globe, Code2, Terminal, Sun, Moon, Clock, Sparkles, Share2 } from 'lucide-react';
 
 const METHODS = [
   { method: 'GET', label: 'GET', color: 'emerald' },
@@ -183,6 +183,7 @@ export default function HomePage() {
   const [headers, setHeaders] = useState(COMMON_HEADERS);
   const [body, setBody] = useState('');
   const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
   const [showAllMethods, setShowAllMethods] = useState(false);
   const [outputFormat, setOutputFormat] = useState<'curl' | 'fetch'>('curl');
   const [showHistory, setShowHistory] = useState(false);
@@ -210,6 +211,38 @@ export default function HomePage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [curlCommand]);
+
+  const shareLink = useCallback(async () => {
+    const state = {
+      url: urlInput,
+      method: selectedMethod,
+      headers,
+      body,
+      outputFormat,
+    };
+    const encoded = btoa(JSON.stringify(state));
+    const shareableUrl = `${window.location.origin}${window.location.pathname}#${encoded}`;
+    await navigator.clipboard.writeText(shareableUrl);
+    setShared(true);
+    setTimeout(() => setShared(false), 2000);
+  }, [urlInput, selectedMethod, headers, body, outputFormat]);
+
+  // Load state from URL hash on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      try {
+        const encoded = window.location.hash.slice(1);
+        const decoded = JSON.parse(atob(encoded));
+        if (decoded.url) setUrlInput(decoded.url);
+        if (decoded.method) setSelectedMethod(decoded.method);
+        if (decoded.headers) setHeaders(decoded.headers);
+        if (decoded.body !== undefined) setBody(decoded.body);
+        if (decoded.outputFormat) setOutputFormat(decoded.outputFormat);
+      } catch {
+        // Invalid hash, ignore
+      }
+    }
+  }, []);
 
   const fillAuth = () => {
     setHeaders((h) => {
@@ -259,12 +292,18 @@ export default function HomePage() {
               )}
             </button>
             <a
+              href="/compare"
+              className="text-xs text-[var(--text-muted)] hover:text-cyan-400 transition-colors"
+            >
+              Compare APIs
+            </a>
+            <a
               href="https://github.com/thakoreh/apicaller"
               className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
               target="_blank"
               rel="noreferrer"
             >
-              Open on GitHub
+              GitHub
             </a>
           </div>
         </div>
@@ -520,6 +559,17 @@ export default function HomePage() {
                   >
                     {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button
+                    onClick={shareLink}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      shared
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30'
+                    }`}
+                  >
+                    {shared ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
+                    {shared ? 'Link Copied!' : 'Share'}
                   </button>
                 </div>
               </div>
