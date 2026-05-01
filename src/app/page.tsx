@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { parseUrl, buildCurlCommand, buildFetchCode, COMMON_HEADERS } from '@/lib/url';
+import Link from 'next/link';
 import { Copy, Check, Zap, Globe, Code2, Terminal, Sun, Moon, Clock, Sparkles, Share2 } from 'lucide-react';
 
 const METHODS = [
@@ -291,12 +292,12 @@ export default function HomePage() {
                 <Moon className="w-4 h-4 text-slate-600" />
               )}
             </button>
-            <a
+            <Link
               href="/compare"
               className="text-xs text-[var(--text-muted)] hover:text-cyan-400 transition-colors"
             >
               Compare APIs
-            </a>
+            </Link>
             <a
               href="https://github.com/thakoreh/apicaller"
               className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"

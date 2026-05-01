@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import Link from 'next/link';
 import { parseUrl, buildCurlCommand, COMMON_HEADERS } from '@/lib/url';
 import { Copy, Check, ArrowLeft, Terminal, Globe, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 
@@ -260,13 +261,13 @@ export default function ComparePage() {
       {/* Header */}
       <header className="border-b border-[var(--surface-border)]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
-          <a
+          <Link
             href="/"
             className="flex items-center gap-2 text-[var(--text-muted)] hover:text-cyan-400 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm">Back</span>
-          </a>
+          </Link>
           <div className="flex items-center gap-2">
             <Terminal className="w-5 h-5 text-cyan-400" />
             <span className="font-semibold text-sm tracking-wide">
