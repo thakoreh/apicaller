@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { parseUrl, buildCurlCommand, buildFetchCode, COMMON_HEADERS } from '@/lib/url';
 import Link from 'next/link';
-import { Copy, Check, Zap, Globe, Code2, Terminal, Sun, Moon, Clock, Sparkles, Share2 } from 'lucide-react';
+import { Copy, Check, Zap, Globe, Code2, Terminal, Sun, Moon, Clock, Sparkles, Share2, Bookmark, BookmarkCheck, Trash2, FolderOpen } from 'lucide-react';
 
 const METHODS = [
   { method: 'GET', label: 'GET', color: 'emerald' },
@@ -141,6 +141,57 @@ function useUrlHistory() {
   return { history, addToHistory, removeFromHistory, clearHistory };
 }
 
+interface CollectionItem {
+  id: string;
+  name: string;
+  url: string;
+  method: string;
+  headers: { key: string; value: string }[];
+  body?: string;
+  savedAt: number;
+}
+
+function useCollection() {
+  const [collection, setCollection] = useState<CollectionItem[]>([]);
+  const [showPanel, setShowPanel] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('apicaller-collection');
+      if (saved) setCollection(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  const saveToCollection = useCallback((item: Omit<CollectionItem, 'id' | 'savedAt'>) => {
+    const newItem: CollectionItem = {
+      ...item,
+      id: Date.now().toString(),
+      savedAt: Date.now(),
+    };
+    setCollection((prev) => {
+      const next = [newItem, ...prev].slice(0, 50);
+      localStorage.setItem('apicaller-collection', JSON.stringify(next));
+      return next;
+    });
+    return newItem.id;
+  }, []);
+
+  const removeFromCollection = useCallback((id: string) => {
+    setCollection((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      localStorage.setItem('apicaller-collection', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const clearCollection = useCallback(() => {
+    setCollection([]);
+    localStorage.removeItem('apicaller-collection');
+  }, []);
+
+  return { collection, showPanel, setShowPanel, saveToCollection, removeFromCollection, clearCollection };
+}
+
 function TypewriterText({ phrases }: { phrases: string[] }) {
   const [text, setText] = useState('');
   const [phraseIndex, setPhraseIndex] = useState(0);
@@ -179,6 +230,7 @@ function TypewriterText({ phrases }: { phrases: string[] }) {
 export default function HomePage() {
   const { theme, toggleTheme } = useTheme();
   const { history, addToHistory, removeFromHistory, clearHistory } = useUrlHistory();
+  const { collection, showPanel, setShowPanel, saveToCollection, removeFromCollection, clearCollection } = useCollection();
   const [urlInput, setUrlInput] = useState('');
   const [selectedMethod, setSelectedMethod] = useState('GET');
   const [headers, setHeaders] = useState(COMMON_HEADERS);
@@ -227,6 +279,13 @@ export default function HomePage() {
     setShared(true);
     setTimeout(() => setShared(false), 2000);
   }, [urlInput, selectedMethod, headers, body, outputFormat]);
+
+  const saveToCol = useCallback(() => {
+    if (!urlInput.trim()) return;
+    const name = prompt('Name this request:');
+    if (!name) return;
+    saveToCollection({ name, url: urlInput, method: selectedMethod, headers, body });
+  }, [urlInput, selectedMethod, headers, body, saveToCollection]);
 
   // Load state from URL hash on mount
   useEffect(() => {
@@ -306,6 +365,18 @@ export default function HomePage() {
             >
               GitHub
             </a>
+            <button
+              onClick={() => setShowPanel(true)}
+              className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-cyan-400 transition-colors"
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              Collection
+              {collection.length > 0 && (
+                <span className="bg-cyan-500/20 text-cyan-400 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">
+                  {collection.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </header>
@@ -572,6 +643,13 @@ export default function HomePage() {
                     {shared ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
                     {shared ? 'Link Copied!' : 'Share'}
                   </button>
+                  <button
+                    onClick={saveToCol}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-all"
+                  >
+                    <Bookmark className="w-3.5 h-3.5" />
+                    Save
+                  </button>
                 </div>
               </div>
               <pre className="font-mono text-xs text-[var(--text-secondary)] leading-relaxed overflow-x-auto whitespace-pre-wrap break-all">
@@ -613,6 +691,92 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+
+      {/* Collection Panel */}
+      {showPanel && (
+        <div className="fixed inset-0 z-50 flex items-start justify-end" onClick={() => setShowPanel(false)}>
+          <div
+            className="w-full max-w-md h-full bg-[var(--background)] border-l border-[var(--surface-border)] shadow-2xl overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-[var(--background)] border-b border-[var(--surface-border)] px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-cyan-400" />
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">My Collection</h2>
+                <span className="text-[var(--text-muted)] text-xs">({collection.length})</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {collection.length > 0 && (
+                  <button
+                    onClick={clearCollection}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowPanel(false)}
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors text-lg leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
+              {collection.length === 0 ? (
+                <div className="text-center py-12">
+                  <Bookmark className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-3 opacity-50" />
+                  <p className="text-[var(--text-muted)] text-sm">No saved requests yet.</p>
+                  <p className="text-[var(--text-muted)] text-xs mt-1">Click "Save" next to any request to add it here.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {collection.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-[var(--surface-border)] bg-[var(--surface)] p-4 hover:border-cyan-500/20 transition-colors group"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                            item.method === 'GET' ? 'bg-emerald-500/20 text-emerald-400' :
+                            item.method === 'POST' ? 'bg-blue-500/20 text-blue-400' :
+                            item.method === 'PUT' ? 'bg-amber-500/20 text-amber-400' :
+                            item.method === 'DELETE' ? 'bg-red-500/20 text-red-400' :
+                            'bg-white/10 text-[var(--text-muted)]'
+                          }`}>
+                            {item.method}
+                          </span>
+                          <span className="text-xs font-medium text-[var(--text-primary)] truncate max-w-[180px]">{item.name}</span>
+                        </div>
+                        <button
+                          onClick={() => removeFromCollection(item.id)}
+                          className="text-[var(--text-muted)] hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <p className="text-[10px] font-mono text-[var(--text-muted)] truncate mb-2">{item.url}</p>
+                      <button
+                        onClick={() => {
+                          setUrlInput(item.url);
+                          setSelectedMethod(item.method);
+                          setHeaders(item.headers.length > 0 ? item.headers : COMMON_HEADERS);
+                          if (item.body) setBody(item.body);
+                          setShowPanel(false);
+                        }}
+                        className="w-full text-xs text-center py-1.5 rounded border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                      >
+                        Load request
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-[var(--surface-border)] mt-auto">
