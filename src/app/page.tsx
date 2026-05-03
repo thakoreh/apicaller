@@ -54,16 +54,6 @@ const API_PRESETS: Preset[] = [
     ],
   },
   {
-    name: 'Stripe',
-    url: 'api.stripe.com/v1/charges',
-    method: 'POST',
-    headers: [
-      { key: 'Content-Type', value: 'application/x-www-form-urlencoded' },
-      { key: 'Authorization', value: 'Bearer sk_test_YOUR_KEY' },
-    ],
-    body: 'amount=2000&currency=usd&source=tok_visa&description=Test charge',
-  },
-  {
     name: 'OpenAI',
     url: 'api.openai.com/v1/chat/completions',
     method: 'POST',
@@ -72,6 +62,47 @@ const API_PRESETS: Preset[] = [
       { key: 'Authorization', value: 'Bearer YOUR_OPENAI_KEY' },
     ],
     body: '{\n  "model": "gpt-4",\n  "messages": [{"role": "user", "content": "Hello!"}]\n}',
+  },
+  {
+    name: 'Anthropic',
+    url: 'api.anthropic.com/v1/messages',
+    method: 'POST',
+    headers: [
+      { key: 'Content-Type', value: 'application/json' },
+      { key: 'x-api-key', value: 'YOUR_ANTHROPIC_KEY' },
+      { key: 'anthropic-version', value: '2023-06-01' },
+    ],
+    body: '{\n  "model": "claude-sonnet-4-20250514",\n  "max_tokens": 1024,\n  "messages": [{"role": "user", "content": "Hello!"}]\n}',
+  },
+  {
+    name: 'Stripe',
+    url: 'api.stripe.com/v1/charges',
+    method: 'POST',
+    headers: [
+      { key: 'Content-Type', value: 'application/x-www-form-urlencoded' },
+      { key: 'Authorization', value: 'Bearer ***' },
+    ],
+    body: 'amount=2000&currency=usd&source=tok_visa&description=Test charge',
+  },
+  {
+    name: 'Notion',
+    url: 'api.notion.com/v1/pages',
+    method: 'POST',
+    headers: [
+      { key: 'Content-Type', value: 'application/json' },
+      { key: 'Authorization', value: 'Bearer YOUR_NOTION_TOKEN' },
+      { key: 'Notion-Version', value: '2022-06-28' },
+    ],
+    body: '{\n  "parent": {"database_id": "YOUR_DB_ID"},\n  "properties": {\n    "Name": {"title": [{"text": {"content": "New page"}}]}\n  }\n}',
+  },
+  {
+    name: 'Supabase',
+    url: 'YOUR_PROJECT.supabase.co/rest/v1/users',
+    method: 'GET',
+    headers: [
+      { key: 'apikey', value: 'YOUR_SUPABASE_ANON_KEY' },
+      { key: 'Authorization', value: 'Bearer YOUR_SUPABASE_ANON_KEY' },
+    ],
   },
 ];
 
@@ -253,6 +284,28 @@ export default function HomePage() {
       ? buildFetchCode(selectedMethod, fullUrl, headers, body)
       : buildCurlCommand(selectedMethod, fullUrl, headers, body)
     : '# Enter a valid URL above to generate a curl command';
+
+  // Keyboard shortcut: Ctrl/Cmd+K to focus URL input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        urlInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const formatJsonBody = useCallback(() => {
+    if (!body.trim()) return;
+    try {
+      const parsed = JSON.parse(body);
+      setBody(JSON.stringify(parsed, null, 2));
+    } catch {
+      // Not valid JSON, ignore
+    }
+  }, [body]);
 
   const addHeader = () => setHeaders((h) => [...h, { key: '', value: '' }]);
   const removeHeader = (i: number) => setHeaders((h) => h.filter((_, idx) => idx !== i));
@@ -450,7 +503,7 @@ export default function HomePage() {
               onFocus={() => { if (history.length > 0 && !urlInput) setShowHistory(true); }}
               onBlur={() => setTimeout(() => setShowHistory(false), 200)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-              placeholder="api.github.com/users/octocat"
+              placeholder="api.github.com/users/octocat  ⌘K to focus"
               className="flex-1 bg-transparent text-[var(--text-primary)] text-sm py-3 pr-4 outline-none placeholder:text-[var(--text-muted)]"
             />
           </div>
@@ -570,9 +623,18 @@ export default function HomePage() {
             {/* Body */}
             {selectedMethod !== 'GET' && selectedMethod !== 'HEAD' && (
               <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-5">
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Request Body</h3>
-                  <p className="text-[var(--text-muted)] text-xs mt-0.5">JSON body for POST/PUT/PATCH</p>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Request Body</h3>
+                    <p className="text-[var(--text-muted)] text-xs mt-0.5">JSON body for POST/PUT/PATCH</p>
+                  </div>
+                  <button
+                    onClick={formatJsonBody}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors px-2 py-1 rounded border border-cyan-500/20 hover:border-cyan-500/40"
+                    title="Format JSON"
+                  >
+                    { } Format
+                  </button>
                 </div>
                 <textarea
                   value={body}

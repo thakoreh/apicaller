@@ -2,10 +2,16 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "apicaller.dev — API endpoint to curl, instantly",
+  title: "apicaller.dev — API endpoint to curl & fetch(), instantly",
   description:
-    "Paste any API URL and get ready-to-copy curl commands for every HTTP method. No docs digging. Built for developers.",
-  keywords: ["api", "curl", "rest", "http", "developer tools", "curl generator"],
+    "Paste any API URL and get ready-to-copy curl commands and JavaScript fetch() code for every HTTP method. Supports GitHub, OpenAI, Anthropic, Stripe, and more. Free, no account needed.",
+  keywords: ["api", "curl", "fetch", "rest", "http", "developer tools", "curl generator", "fetch generator", "api tester", "api debugger"],
+  openGraph: {
+    title: "apicaller.dev — API to curl & fetch(), instantly",
+    description: "Paste any API URL and get ready-to-copy curl commands and JavaScript fetch() code. No docs digging.",
+    type: "website",
+    url: "https://thakoreh.github.io/apicaller/",
+  },
 };
 
 export default function RootLayout({
