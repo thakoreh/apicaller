@@ -380,11 +380,11 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
+    <div className="min-h-[100dvh] overflow-x-hidden bg-[var(--background)] text-[var(--text-primary)]">
       {/* Header */}
       <header className="border-b border-[var(--surface-border)]">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-center gap-2 sm:justify-start">
             <Terminal className="w-5 h-5 text-cyan-400" />
             <span className="font-semibold text-sm tracking-wide">
               <span className="text-cyan-400">api</span>
@@ -392,7 +392,7 @@ export default function HomePage() {
               <span className="text-[var(--text-muted)]">.dev</span>
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-end">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg border border-[var(--surface-border)] bg-[var(--surface)] hover:bg-white/10 transition-all"
@@ -588,20 +588,20 @@ export default function HomePage() {
               </div>
               <div className="space-y-2">
                 {headers.map((h, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
                     <input
                       type="text"
                       value={h.key}
                       onChange={(e) => updateHeader(i, 'key', e.target.value)}
                       placeholder="Header"
-                      className="flex-1 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
+                      className="min-w-0 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
                     />
                     <input
                       type="text"
                       value={h.value}
                       onChange={(e) => updateHeader(i, 'value', e.target.value)}
                       placeholder="Value"
-                      className="flex-1 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
+                      className="min-w-0 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
                     />
                     <button
                       onClick={() => removeHeader(i)}
@@ -650,21 +650,21 @@ export default function HomePage() {
           {/* Right: output */}
           <div className="lg:col-span-2">
             <div className="rounded-xl border border-cyan-500/20 bg-[var(--code-bg)] p-5 sticky top-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+                <div className="flex min-w-0 items-center gap-2">
                   <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${selectedMethod === 'GET' ? 'bg-emerald-500/20 text-emerald-400' : selectedMethod === 'POST' ? 'bg-blue-500/20 text-blue-400' : selectedMethod === 'PUT' ? 'bg-amber-500/20 text-amber-400' : selectedMethod === 'PATCH' ? 'bg-violet-500/20 text-violet-400' : selectedMethod === 'DELETE' ? 'bg-red-500/20 text-red-400' : 'bg-white/10 text-[var(--text-muted)]'}`}>
                     {selectedMethod}
                   </span>
-                  <span className="text-xs text-[var(--text-muted)] font-mono truncate max-w-[140px]">
+                  <span className="min-w-0 max-w-full text-xs text-[var(--text-muted)] font-mono truncate sm:max-w-[140px]">
                     {parsed.isValid ? parsed.pathname || '/' : '...'}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="grid w-full grid-cols-2 gap-2 min-[420px]:grid-cols-4 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
                   {/* Output format toggle */}
-                  <div className="flex items-center rounded-lg border border-[var(--surface-border)] overflow-hidden">
+                  <div className="col-span-2 flex min-w-0 items-center rounded-lg border border-[var(--surface-border)] overflow-hidden min-[420px]:col-span-1">
                     <button
                       onClick={() => setOutputFormat('curl')}
-                      className={`px-2.5 py-1 text-xs font-mono transition-colors ${
+                      className={`flex-1 px-2.5 py-1 text-xs font-mono transition-colors sm:flex-none ${
                         outputFormat === 'curl'
                           ? 'bg-cyan-500/20 text-cyan-400 border-r border-[var(--surface-border)]'
                           : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
@@ -674,7 +674,7 @@ export default function HomePage() {
                     </button>
                     <button
                       onClick={() => setOutputFormat('fetch')}
-                      className={`px-2.5 py-1 text-xs font-mono transition-colors ${
+                      className={`flex-1 px-2.5 py-1 text-xs font-mono transition-colors sm:flex-none ${
                         outputFormat === 'fetch'
                           ? 'bg-cyan-500/20 text-cyan-400'
                           : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
@@ -685,7 +685,7 @@ export default function HomePage() {
                   </div>
                   <button
                     onClick={copyCommand}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    className={`min-w-0 justify-center flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       copied
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                         : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30'
@@ -696,7 +696,7 @@ export default function HomePage() {
                   </button>
                   <button
                     onClick={shareLink}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    className={`min-w-0 justify-center flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       shared
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                         : 'bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30'
@@ -707,7 +707,7 @@ export default function HomePage() {
                   </button>
                   <button
                     onClick={saveToCol}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-all"
+                    className="min-w-0 justify-center flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-all"
                   >
                     <Bookmark className="w-3.5 h-3.5" />
                     Save
@@ -842,7 +842,7 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="border-t border-[var(--surface-border)] mt-auto">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between text-xs text-[var(--text-muted)]">
+        <div className="max-w-5xl mx-auto px-6 py-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-[var(--text-muted)]">
           <span>
             <span className="text-cyan-400">apicaller</span>.dev — built for devs who hate docs
           </span>
