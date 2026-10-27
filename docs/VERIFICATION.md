@@ -65,15 +65,16 @@ npm start -- --port 3104
 | Clipboard denied, save/load body and zero headers | Passed using temporary local page mocks; reloading removes mocks |
 | Malformed share hash and synthetic corrupted storage | Passed, builder remains usable and shows invalid-share feedback |
 | Native Chrome prompt automation | Coverage limit: prompt opened, browser automation timed out handling it; QA tab was closed; save-state path tested with deterministic prompt mock |
-| Remote push, draft PR, exact-head CI | Not run: automatic approval review rejected the push for lack of direct user authorization; local branch and commits are preserved pending approval |
+| Remote push and draft PR | Direct approval received; branch pushed and [PR #1](https://github.com/thakoreh/apicaller/pull/1) opened |
+| Exact-head remote CI | See [PR checks](https://github.com/thakoreh/apicaller/pull/1/checks) for the current immutable head and terminal results |
 | Physical mobile device, Firefox/Safari, screen reader | Not run |
 | Live authenticated/provider API calls | Not run; no keys, spend, or private data used |
 
-Initial restricted-sandbox Next dev/Git Bash subprocesses failed on sandbox process/temp permissions; reviewed elevated local runs and workspace TEMP succeeded. The nested clean-consumer build emitted a harmless Next warning that it ignored the parent clone's lockfile outside the consumer Git root; it used its own lockfile and passed. The added QA workflow is configured for normal install/test/lint/build on standalone Linux Node 20/22 and Windows Node 20 checkouts. Remote execution awaits push approval; no exact-head CI result is claimed.
+Initial restricted-sandbox Next dev/Git Bash subprocesses failed on sandbox process/temp permissions; reviewed elevated local runs and workspace TEMP succeeded. The nested clean-consumer build emitted a harmless Next warning that it ignored the parent clone's lockfile outside the consumer Git root; it used its own lockfile and passed. The added QA workflow runs normal install/test/lint/build on standalone Linux Node 20/22 and Windows Node 20 checkouts. Its first Node 22 run exposed a test-runner difference: `node --test tests` no longer accepts the directory as Node 20 did. The npm script now lists both test files explicitly, avoiding shell glob and runtime directory-discovery differences.
 
 ## Delivery and production limits
 
-The branch contains code, regression tests, a read-only QA workflow, updated README and these screenshots. No merge, tag, package publication or deployment was performed. The Pages deploy workflow still triggers only on `main`, so the published site remains affected until an owner reviews/merges and authorizes deployment. Server-specific dependency advisories do not imply the same exposure in this static-only Pages deployment, but fresh local development/build tooling is updated.
+The branch contains code, regression tests, a read-only QA workflow, updated README and these screenshots. No merge, tag, package publication or deployment was performed. Although merging the audited fix was approved, site deployment remains excluded. The existing Pages workflow deploys on every push to `main`, so this specific merge is held until deployment is explicitly approved. The published site remains affected. Server-specific dependency advisories do not imply the same exposure in this static-only Pages deployment, but fresh local development/build tooling is updated.
 
 ![Final mobile builder](screenshots/qa-mobile.jpg)
 
