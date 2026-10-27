@@ -2,6 +2,8 @@
 
 Build curl and JavaScript fetch requests from an API URL in your browser.
 
+**[Try the live builder](https://thakoreh.github.io/apicaller/)**
+
 Paste an endpoint, choose an HTTP method, edit headers and the request body, then copy the generated code. You can also save requests locally and compare two endpoint configurations.
 
 ## Run locally
