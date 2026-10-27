@@ -8,7 +8,7 @@ Paste an endpoint, choose an HTTP method, edit headers and the request body, the
 
 ## Run locally
 
-Use Node.js 20 or newer, matching the repository's CI baseline.
+Use Node.js 20.9 or newer. CI checks Node.js 20 and 22.
 
 ```bash
 git clone https://github.com/thakoreh/apicaller.git
@@ -48,12 +48,22 @@ Share links encode the request configuration in the URL fragment using Base64. *
 
 Generated curl commands use POSIX shell quoting. Windows users should review shell syntax before running them, for example in Git Bash or WSL. Review all generated code before using it.
 
+Only HTTP(S) URLs are supported. Put authentication in headers rather than embedding credentials in a URL. GET and HEAD omit the body; other methods preserve the body text as entered, including whitespace. The fetch example reads response text so empty and non-JSON responses also work. Use `JSON.parse(data)` when you expect JSON.
+
+Duplicate header rows are preserved in both output formats. Header names must be HTTP tokens; values must be valid browser header text (no line breaks, control characters, or characters outside the byte range). Invalid headers show an error and disable copy/share until corrected.
+
+If clipboard access is blocked, the builder shows an error and you can select and copy the generated code manually. In browsers that disable localStorage, requests remain usable in memory but history and collections do not persist.
+
 ## Development
 
 ```bash
+npm test
 npm run lint
 npm run build
+npm start
 ```
+
+`npm start` previews the built static files at [http://127.0.0.1:3000/apicaller](http://127.0.0.1:3000/apicaller), including the comparison page. Choose another port with `npm start -- --port 3100`. Build first; the preview serves only on loopback. For a clean audit, the test suite executes generated fetch code against a fake response and curl against a fake shell command, without sending API requests. The curl argument test requires Bash (Git Bash on Windows).
 
 Built with Next.js, React, TypeScript, and Tailwind CSS. The project is configured for static export; GitHub Actions builds and deploys the `out/` directory to GitHub Pages.
 

@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { parseUrl, buildCurlCommand, COMMON_HEADERS } from '@/lib/url';
+import { setUrlProtocol, getUrlProtocol } from '@/lib/request-state';
+import { getHeadersError } from '@/lib/headers';
 import { Copy, Check, ArrowLeft, Terminal, Globe, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE'];
@@ -12,13 +14,6 @@ const COLOR_MAP: Record<string, string> = {
   POST: 'bg-blue-500 text-white',
   PUT: 'bg-amber-500 text-white',
   DELETE: 'bg-red-500 text-white',
-};
-
-const COLOR_TEXT: Record<string, string> = {
-  GET: 'text-emerald-400',
-  POST: 'text-blue-400',
-  PUT: 'text-amber-400',
-  DELETE: 'text-red-400',
 };
 
 interface PanelState {
@@ -45,9 +40,10 @@ function ApiPanel({
     ? `${parsed.protocol}://${parsed.host}${parsed.pathname}${parsed.search}`
     : '';
 
-  const curlCommand = parsed.isValid
+  const headerError = getHeadersError(state.headers);
+  const curlCommand = parsed.isValid && !headerError
     ? buildCurlCommand(state.selectedMethod, fullUrl, state.headers, '')
-    : '# Enter a valid URL to generate a curl command';
+    : headerError ? `# ${headerError}` : '# Enter a valid URL to generate a curl command';
 
   const addHeader = () => onChange({ headers: [...state.headers, { key: '', value: '' }] });
   const removeHeader = (i: number) =>
@@ -68,8 +64,9 @@ function ApiPanel({
         <div className="pl-4 pr-2 py-3 flex items-center gap-2">
           <Globe className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
           <select
-            value={parsed.isValid ? parsed.protocol : 'https'}
-            onChange={() => {}}
+            value={getUrlProtocol(state.urlInput)}
+                onChange={(e) => onChange({ urlInput: setUrlProtocol(state.urlInput, e.target.value) })}
+                aria-label={`${label} protocol`}
             className="bg-transparent text-[var(--text-muted)] text-sm outline-none cursor-pointer pr-2"
           >
             <option value="https">https://</option>
@@ -78,15 +75,16 @@ function ApiPanel({
         </div>
         <input
           type="text"
+          aria-label={`${label} URL`}
           value={state.urlInput}
           onChange={(e) => onChange({ urlInput: e.target.value })}
           placeholder="api.example.com/users"
-          className="flex-1 bg-transparent text-[var(--text-primary)] text-sm py-3 pr-4 outline-none placeholder:text-[var(--text-muted)]"
+          className="min-w-0 flex-1 bg-transparent text-[var(--text-primary)] text-sm py-3 pr-4 outline-none placeholder:text-[var(--text-muted)]"
         />
       </div>
 
       {/* Method Selector */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-[var(--text-muted)] text-xs w-16">METHOD</span>
         {METHODS.map((method) => (
           <button
@@ -116,23 +114,26 @@ function ApiPanel({
         </div>
         <div className="space-y-2">
           {state.headers.map((h, i) => (
-            <div key={i} className="flex items-center gap-2">
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
               <input
                 type="text"
+                aria-label={`${label} header ${i + 1} name`}
                 value={h.key}
                 onChange={(e) => updateHeader(i, 'key', e.target.value)}
                 placeholder="Header"
-                className="flex-1 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
+                className="min-w-0 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
               />
               <input
                 type="text"
+                aria-label={`${label} header ${i + 1} value`}
                 value={h.value}
                 onChange={(e) => updateHeader(i, 'value', e.target.value)}
                 placeholder="Value"
-                className="flex-1 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
+                className="min-w-0 bg-white/5 border border-[var(--surface-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:border-cyan-500/50 placeholder:text-[var(--text-muted)]"
               />
               <button
                 onClick={() => removeHeader(i)}
+                aria-label={`${label} remove header ${i + 1}`}
                 className="text-[var(--text-muted)] hover:text-red-400 transition-colors text-xs px-1"
               >
                 ×
@@ -151,6 +152,7 @@ function ApiPanel({
           </div>
           <button
             onClick={onCopy}
+            disabled={!parsed.isValid || !!headerError}
             className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs bg-[var(--surface)] border border-[var(--surface-border)] text-[var(--text-secondary)] hover:text-cyan-400 hover:border-cyan-500/30 transition-all"
           >
             {copied ? (
@@ -169,6 +171,7 @@ function ApiPanel({
         <pre className="text-xs text-[var(--text-secondary)] font-mono overflow-x-auto whitespace-pre-wrap break-all">
           {curlCommand}
         </pre>
+        {headerError && <p role="alert" className="mt-3 text-xs text-red-400">{headerError}</p>}
       </div>
     </div>
   );
@@ -191,7 +194,7 @@ function DiffRow({
   return (
     <div className="flex items-center gap-3 py-2 border-b border-[var(--surface-border)] last:border-b-0">
       <span className="text-xs text-[var(--text-muted)] w-20 flex-shrink-0">{label}</span>
-      <div className="flex-1 flex items-center gap-2">
+      <div className="min-w-0 flex-1 flex flex-wrap items-center gap-2 break-all">
         <span className={`text-xs font-mono ${isDifferent ? 'text-red-400' : 'text-emerald-400'}`}>
           {value1 || '(empty)'}
         </span>
@@ -220,6 +223,7 @@ export default function ComparePage() {
   });
   const [copied1, setCopied1] = useState(false);
   const [copied2, setCopied2] = useState(false);
+  const [copyError, setCopyError] = useState('');
 
   const parsed1 = parseUrl(panel1.urlInput);
   const parsed2 = parseUrl(panel2.urlInput);
@@ -231,30 +235,39 @@ export default function ComparePage() {
     ? `${parsed2.protocol}://${parsed2.host}${parsed2.pathname}${parsed2.search}`
     : '';
 
-  const curl1 = parsed1.isValid
+  const curl1 = parsed1.isValid && !getHeadersError(panel1.headers)
     ? buildCurlCommand(panel1.selectedMethod, fullUrl1, panel1.headers, '')
     : '';
-  const curl2 = parsed2.isValid
+  const curl2 = parsed2.isValid && !getHeadersError(panel2.headers)
     ? buildCurlCommand(panel2.selectedMethod, fullUrl2, panel2.headers, '')
     : '';
 
   const copy1 = useCallback(async () => {
-    await navigator.clipboard.writeText(curl1);
-    setCopied1(true);
-    setTimeout(() => setCopied1(false), 2000);
+    setCopyError('');
+    try {
+      await navigator.clipboard.writeText(curl1);
+      setCopied1(true);
+      setTimeout(() => setCopied1(false), 2000);
+    } catch {
+      setCopied1(false);
+      setCopyError('Clipboard access failed. Select and copy the command manually.');
+    }
   }, [curl1]);
 
   const copy2 = useCallback(async () => {
-    await navigator.clipboard.writeText(curl2);
-    setCopied2(true);
-    setTimeout(() => setCopied2(false), 2000);
+    setCopyError('');
+    try {
+      await navigator.clipboard.writeText(curl2);
+      setCopied2(true);
+      setTimeout(() => setCopied2(false), 2000);
+    } catch {
+      setCopied2(false);
+      setCopyError('Clipboard access failed. Select and copy the command manually.');
+    }
   }, [curl2]);
 
-  const hasDiff =
-    parsed1.host !== parsed2.host ||
-    parsed1.pathname !== parsed2.pathname ||
-    parsed1.search !== parsed2.search ||
-    panel1.selectedMethod !== panel2.selectedMethod;
+  const hasDiff = curl1 !== curl2;
+  const headerSummary = (headers: PanelState['headers']) => headers.filter((h) => h.key.trim()).map((h) => `${h.key.trim()}: ${h.value.trim()}`).join('\n');
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
@@ -281,6 +294,7 @@ export default function ComparePage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {copyError && <p role="alert" className="mb-4 text-xs text-red-400">{copyError}</p>}
         <div className="mb-8">
           <h1 className="text-2xl font-bold mb-2">
             <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -315,7 +329,7 @@ export default function ComparePage() {
         </div>
 
         {/* Diff section */}
-        {parsed1.isValid && parsed2.isValid && (
+        {parsed1.isValid && parsed2.isValid && !getHeadersError(panel1.headers) && !getHeadersError(panel2.headers) && (
           <div className="rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] p-5">
             <div className="flex items-center gap-2 mb-4">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -328,6 +342,7 @@ export default function ComparePage() {
                 <DiffRow label="Path" value1={parsed1.pathname} value2={parsed2.pathname} />
                 <DiffRow label="Query" value1={parsed1.search} value2={parsed2.search} />
                 <DiffRow label="Method" value1={panel1.selectedMethod} value2={panel2.selectedMethod} />
+                <DiffRow label="Headers" value1={headerSummary(panel1.headers)} value2={headerSummary(panel2.headers)} />
                 <DiffRow
                   label="Protocol"
                   value1={parsed1.protocol}
