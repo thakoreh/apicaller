@@ -2,8 +2,10 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { parseUrl, buildCurlCommand, buildFetchCode, COMMON_HEADERS } from '@/lib/url';
+import { decodeRequestState, encodeRequestState, readRequestState, setUrlProtocol, getUrlProtocol, storageGet, storageSet, storageRemove } from '@/lib/request-state';
+import { getHeadersError } from '@/lib/headers';
 import Link from 'next/link';
-import { Copy, Check, Zap, Globe, Code2, Terminal, Sun, Moon, Clock, Sparkles, Share2, Bookmark, BookmarkCheck, Trash2, FolderOpen } from 'lucide-react';
+import { Copy, Check, Zap, Globe, Code2, Terminal, Sun, Moon, Clock, Sparkles, Share2, Bookmark, Trash2, FolderOpen } from 'lucide-react';
 
 const METHODS = [
   { method: 'GET', label: 'GET', color: 'emerald' },
@@ -23,16 +25,6 @@ const COLOR_MAP: Record<string, string> = {
   red: 'bg-red-500 text-white',
   cyan: 'bg-cyan-500 text-white',
   slate: 'bg-slate-500 text-white',
-};
-
-const COLOR_BORDER: Record<string, string> = {
-  emerald: 'border-emerald-500 text-emerald-600',
-  blue: 'border-blue-500 text-blue-600',
-  amber: 'border-amber-500 text-amber-600',
-  violet: 'border-violet-500 text-violet-600',
-  red: 'border-red-500 text-red-600',
-  cyan: 'border-cyan-500 text-cyan-600',
-  slate: 'border-slate-500 text-slate-600',
 };
 
 interface Preset {
@@ -117,17 +109,19 @@ function useTheme() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   useEffect(() => {
-    const saved = localStorage.getItem('apicaller-theme') as 'dark' | 'light' | null;
-    if (saved) {
-      setTheme(saved);
-      document.documentElement.setAttribute('data-theme', saved);
-    }
+    queueMicrotask(() => {
+      const saved = storageGet('apicaller-theme');
+      if (saved === 'dark' || saved === 'light') {
+        setTheme(saved);
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    });
   }, []);
 
   const toggleTheme = useCallback(() => {
     setTheme((prev) => {
       const next = prev === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('apicaller-theme', next);
+      storageSet('apicaller-theme', next);
       document.documentElement.setAttribute('data-theme', next);
       return next;
     });
@@ -140,10 +134,12 @@ function useUrlHistory() {
   const [history, setHistory] = useState<string[]>([]);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('apicaller-url-history');
-      if (saved) setHistory(JSON.parse(saved));
-    } catch {}
+    queueMicrotask(() => {
+      try {
+        const saved = JSON.parse(storageGet('apicaller-url-history') || '[]');
+        if (Array.isArray(saved)) setHistory(saved.filter((value) => typeof value === 'string').slice(0, 10));
+      } catch {}
+    });
   }, []);
 
   const addToHistory = useCallback((url: string) => {
@@ -151,7 +147,7 @@ function useUrlHistory() {
     setHistory((prev) => {
       const filtered = prev.filter((u) => u !== url);
       const next = [url, ...filtered].slice(0, 10);
-      localStorage.setItem('apicaller-url-history', JSON.stringify(next));
+      storageSet('apicaller-url-history', JSON.stringify(next));
       return next;
     });
   }, []);
@@ -159,14 +155,14 @@ function useUrlHistory() {
   const removeFromHistory = useCallback((url: string) => {
     setHistory((prev) => {
       const next = prev.filter((u) => u !== url);
-      localStorage.setItem('apicaller-url-history', JSON.stringify(next));
+      storageSet('apicaller-url-history', JSON.stringify(next));
       return next;
     });
   }, []);
 
   const clearHistory = useCallback(() => {
     setHistory([]);
-    localStorage.removeItem('apicaller-url-history');
+    storageRemove('apicaller-url-history');
   }, []);
 
   return { history, addToHistory, removeFromHistory, clearHistory };
@@ -187,21 +183,23 @@ function useCollection() {
   const [showPanel, setShowPanel] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('apicaller-collection');
-      if (saved) setCollection(JSON.parse(saved));
-    } catch {}
+    queueMicrotask(() => {
+      try {
+        const saved = JSON.parse(storageGet('apicaller-collection') || '[]');
+        if (Array.isArray(saved)) setCollection(saved.filter((item) => readRequestState(item) && typeof item.id === 'string' && typeof item.name === 'string' && typeof item.savedAt === 'number').slice(0, 50));
+      } catch {}
+    });
   }, []);
 
   const saveToCollection = useCallback((item: Omit<CollectionItem, 'id' | 'savedAt'>) => {
     const newItem: CollectionItem = {
       ...item,
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       savedAt: Date.now(),
     };
     setCollection((prev) => {
       const next = [newItem, ...prev].slice(0, 50);
-      localStorage.setItem('apicaller-collection', JSON.stringify(next));
+      storageSet('apicaller-collection', JSON.stringify(next));
       return next;
     });
     return newItem.id;
@@ -210,14 +208,14 @@ function useCollection() {
   const removeFromCollection = useCallback((id: string) => {
     setCollection((prev) => {
       const next = prev.filter((item) => item.id !== id);
-      localStorage.setItem('apicaller-collection', JSON.stringify(next));
+      storageSet('apicaller-collection', JSON.stringify(next));
       return next;
     });
   }, []);
 
   const clearCollection = useCallback(() => {
     setCollection([]);
-    localStorage.removeItem('apicaller-collection');
+    storageRemove('apicaller-collection');
   }, []);
 
   return { collection, showPanel, setShowPanel, saveToCollection, removeFromCollection, clearCollection };
@@ -268,10 +266,10 @@ export default function HomePage() {
   const [body, setBody] = useState('');
   const [copied, setCopied] = useState(false);
   const [shared, setShared] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [showAllMethods, setShowAllMethods] = useState(false);
   const [outputFormat, setOutputFormat] = useState<'curl' | 'fetch'>('curl');
   const [showHistory, setShowHistory] = useState(false);
-  const [showPresets, setShowPresets] = useState(false);
   const urlInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = parseUrl(urlInput);
@@ -279,11 +277,13 @@ export default function HomePage() {
     ? `${parsed.protocol}://${parsed.host}${parsed.pathname}${parsed.search}`
     : urlInput.startsWith('http') ? urlInput : '';
 
-  const curlCommand = parsed.isValid
+  const headerError = getHeadersError(headers);
+  const canGenerate = parsed.isValid && !headerError;
+  const curlCommand = canGenerate
     ? outputFormat === 'fetch'
       ? buildFetchCode(selectedMethod, fullUrl, headers, body)
       : buildCurlCommand(selectedMethod, fullUrl, headers, body)
-    : '# Enter a valid URL above to generate a curl command';
+    : headerError ? `# ${headerError}` : '# Enter a valid URL above to generate a curl command';
 
   // Keyboard shortcut: Ctrl/Cmd+K to focus URL input
   useEffect(() => {
@@ -298,12 +298,13 @@ export default function HomePage() {
   }, []);
 
   const formatJsonBody = useCallback(() => {
+    setActionError('');
     if (!body.trim()) return;
     try {
       const parsed = JSON.parse(body);
       setBody(JSON.stringify(parsed, null, 2));
     } catch {
-      // Not valid JSON, ignore
+      setActionError('The body is not valid JSON. Edit it before formatting.');
     }
   }, [body]);
 
@@ -313,9 +314,15 @@ export default function HomePage() {
     setHeaders((h) => h.map((header, idx) => (idx === i ? { ...header, [field]: val } : header)));
 
   const copyCommand = useCallback(async () => {
-    await navigator.clipboard.writeText(curlCommand);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setActionError('');
+    try {
+      await navigator.clipboard.writeText(curlCommand);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setActionError('Clipboard access failed. Select and copy the generated code manually.');
+    }
   }, [curlCommand]);
 
   const shareLink = useCallback(async () => {
@@ -326,11 +333,17 @@ export default function HomePage() {
       body,
       outputFormat,
     };
-    const encoded = btoa(JSON.stringify(state));
+    const encoded = encodeRequestState(state);
     const shareableUrl = `${window.location.origin}${window.location.pathname}#${encoded}`;
-    await navigator.clipboard.writeText(shareableUrl);
-    setShared(true);
-    setTimeout(() => setShared(false), 2000);
+    setActionError('');
+    try {
+      await navigator.clipboard.writeText(shareableUrl);
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
+    } catch {
+      setShared(false);
+      setActionError('Clipboard access failed. Allow clipboard access and try sharing again.');
+    }
   }, [urlInput, selectedMethod, headers, body, outputFormat]);
 
   const saveToCol = useCallback(() => {
@@ -342,19 +355,20 @@ export default function HomePage() {
 
   // Load state from URL hash on mount
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash) {
-      try {
-        const encoded = window.location.hash.slice(1);
-        const decoded = JSON.parse(atob(encoded));
-        if (decoded.url) setUrlInput(decoded.url);
-        if (decoded.method) setSelectedMethod(decoded.method);
-        if (decoded.headers) setHeaders(decoded.headers);
-        if (decoded.body !== undefined) setBody(decoded.body);
-        if (decoded.outputFormat) setOutputFormat(decoded.outputFormat);
-      } catch {
-        // Invalid hash, ignore
+    queueMicrotask(() => {
+      if (window.location.hash) {
+        const decoded = decodeRequestState(window.location.hash.slice(1));
+        if (decoded) {
+          setUrlInput(decoded.url);
+          setSelectedMethod(decoded.method);
+          setHeaders(decoded.headers);
+          setBody(decoded.body ?? '');
+          setOutputFormat(decoded.outputFormat ?? 'curl');
+        } else {
+          setActionError('This share link is invalid. Enter a request to start again.');
+        }
       }
-    }
+    });
   }, []);
 
   const fillAuth = () => {
@@ -369,8 +383,7 @@ export default function HomePage() {
     setUrlInput(preset.url);
     setSelectedMethod(preset.method);
     setHeaders(preset.headers);
-    if (preset.body) setBody(preset.body);
-    setShowPresets(false);
+    setBody(preset.body ?? '');
   };
 
   const handleSubmit = () => {
@@ -487,8 +500,9 @@ export default function HomePage() {
             <div className="pl-4 pr-2 py-3 flex items-center gap-2">
               <Globe className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
               <select
-                value={parsed.isValid ? parsed.protocol : 'https'}
-                onChange={() => {}}
+                value={getUrlProtocol(urlInput)}
+                onChange={(e) => setUrlInput(setUrlProtocol(urlInput, e.target.value))}
+                aria-label="URL protocol"
                 className="bg-transparent text-[var(--text-muted)] text-sm outline-none cursor-pointer pr-2"
               >
                 <option value="https">https://</option>
@@ -498,17 +512,18 @@ export default function HomePage() {
             <input
               ref={urlInputRef}
               type="text"
+              aria-label="API URL"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               onFocus={() => { if (history.length > 0 && !urlInput) setShowHistory(true); }}
               onBlur={() => setTimeout(() => setShowHistory(false), 200)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
               placeholder="api.github.com/users/octocat  ⌘K to focus"
-              className="flex-1 bg-transparent text-[var(--text-primary)] text-sm py-3 pr-4 outline-none placeholder:text-[var(--text-muted)]"
+              className="min-w-0 flex-1 bg-transparent text-[var(--text-primary)] text-sm py-3 pr-4 outline-none placeholder:text-[var(--text-muted)]"
             />
           </div>
           {urlInput && !parsed.isValid && (
-            <p className="text-red-400 text-xs mt-2 pl-1">Enter a valid URL</p>
+            <p className="text-red-400 text-xs mt-2 pl-1">Enter an HTTP or HTTPS URL without embedded credentials</p>
           )}
 
           {/* URL History dropdown */}
@@ -591,6 +606,7 @@ export default function HomePage() {
                   <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
                     <input
                       type="text"
+                      aria-label={`Header ${i + 1} name`}
                       value={h.key}
                       onChange={(e) => updateHeader(i, 'key', e.target.value)}
                       placeholder="Header"
@@ -598,6 +614,7 @@ export default function HomePage() {
                     />
                     <input
                       type="text"
+                      aria-label={`Header ${i + 1} value`}
                       value={h.value}
                       onChange={(e) => updateHeader(i, 'value', e.target.value)}
                       placeholder="Value"
@@ -605,6 +622,7 @@ export default function HomePage() {
                     />
                     <button
                       onClick={() => removeHeader(i)}
+                      aria-label={`Remove header ${i + 1}`}
                       className="text-[var(--text-muted)] hover:text-red-400 transition-colors text-xs px-1"
                     >
                       ×
@@ -637,6 +655,7 @@ export default function HomePage() {
                   </button>
                 </div>
                 <textarea
+                  aria-label="Request body"
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   placeholder={'{\n  "key": "value"\n}'}
@@ -685,6 +704,7 @@ export default function HomePage() {
                   </div>
                   <button
                     onClick={copyCommand}
+                    disabled={!canGenerate}
                     className={`min-w-0 justify-center flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       copied
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -696,6 +716,7 @@ export default function HomePage() {
                   </button>
                   <button
                     onClick={shareLink}
+                    disabled={!canGenerate}
                     className={`min-w-0 justify-center flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       shared
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -707,6 +728,7 @@ export default function HomePage() {
                   </button>
                   <button
                     onClick={saveToCol}
+                    disabled={!canGenerate}
                     className="min-w-0 justify-center flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-all"
                   >
                     <Bookmark className="w-3.5 h-3.5" />
@@ -717,6 +739,7 @@ export default function HomePage() {
               <pre className="font-mono text-xs text-[var(--text-secondary)] leading-relaxed overflow-x-auto whitespace-pre-wrap break-all">
                 {curlCommand}
               </pre>
+              {(headerError || actionError) && <p role="alert" className="mt-3 text-xs text-red-400">{headerError || actionError}</p>}
             </div>
 
             {/* Quick tips */}
@@ -789,7 +812,7 @@ export default function HomePage() {
                 <div className="text-center py-12">
                   <Bookmark className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-3 opacity-50" />
                   <p className="text-[var(--text-muted)] text-sm">No saved requests yet.</p>
-                  <p className="text-[var(--text-muted)] text-xs mt-1">Click "Save" next to any request to add it here.</p>
+                  <p className="text-[var(--text-muted)] text-xs mt-1">Click &quot;Save&quot; next to any request to add it here.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -823,8 +846,8 @@ export default function HomePage() {
                         onClick={() => {
                           setUrlInput(item.url);
                           setSelectedMethod(item.method);
-                          setHeaders(item.headers.length > 0 ? item.headers : COMMON_HEADERS);
-                          if (item.body) setBody(item.body);
+                          setHeaders(item.headers);
+                          setBody(item.body ?? '');
                           setShowPanel(false);
                         }}
                         className="w-full text-xs text-center py-1.5 rounded border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-colors"

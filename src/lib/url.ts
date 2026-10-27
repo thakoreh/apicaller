@@ -1,13 +1,21 @@
 import { ParsedUrl } from '@/types';
+import { getHeadersError } from './headers';
 
 export function parseUrl(input: string): ParsedUrl {
   try {
-    // Add protocol if missing
     let urlString = input.trim();
-    if (!urlString.startsWith('http://') && !urlString.startsWith('https://')) {
+    if (!urlString || /\s/.test(urlString)) throw new Error('Invalid URL');
+    if (!/^https?:\/\//i.test(urlString)) {
+      // Allow host:port, but never reinterpret another URL scheme as a host.
+      if (/^[a-z][a-z\d+.-]*:/i.test(urlString) && !/^[^/?#]+:\d+(?:[/?#]|$)/.test(urlString)) {
+        throw new Error('Use HTTP or HTTPS');
+      }
       urlString = 'https://' + urlString;
     }
     const url = new URL(urlString);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) {
+      throw new Error('Use an HTTP URL without embedded credentials');
+    }
     return {
       protocol: url.protocol.replace(':', ''),
       host: url.host,
@@ -32,39 +40,27 @@ export function buildFetchCode(
   headers: { key: string; value: string }[],
   body: string,
 ): string {
-  const hasBody = body.trim() && !['GET', 'HEAD', 'OPTIONS'].includes(method);
-  const headersObj = headers
-    .filter((h) => h.key.trim())
-    .reduce<Record<string, string>>((acc, h) => {
-      acc[h.key.trim()] = h.value.trim();
-      return acc;
-    }, {});
+  const error = getHeadersError(headers);
+  if (error) throw new Error(error);
+  const hasBody = body.length > 0 && !['GET', 'HEAD'].includes(method.toUpperCase());
+  const headerRows = headers.filter((h) => h.key.trim());
 
   const parts: string[] = [];
 
-  if (hasBody) {
-    parts.push(`const response = await fetch('${url}', {\n  method: '${method}',`);
-  } else {
-    parts.push(`const response = await fetch('${url}', {\n  method: '${method}',`);
-  }
+  parts.push(`const response = await fetch(${JSON.stringify(url)}, {\n  method: ${JSON.stringify(method)},`);
 
-  if (Object.keys(headersObj).length > 0) {
-    const hdrLines = Object.entries(headersObj)
-      .map(([k, v]) => `    ${JSON.stringify(k)}: ${JSON.stringify(v)}`)
+  if (headerRows.length > 0) {
+    const hdrLines = headerRows
+      .map((h) => `    ${JSON.stringify([h.key.trim(), h.value.trim()])}`)
       .join(',\n');
-    parts.push(`  headers: {\n${hdrLines},\n  },`);
+    parts.push(`  headers: [\n${hdrLines},\n  ],`);
   }
 
   if (hasBody) {
-    const escaped = body.trim();
-    if (headersObj['Content-Type']?.includes('json')) {
-      parts.push(`  body: JSON.stringify(${escaped}),`);
-    } else {
-      parts.push(`  body: \`${escaped}\`,`);
-    }
+    parts.push(`  body: ${JSON.stringify(body)},`);
   }
 
-  parts.push(`});\n\nconst data = await response.json();\nconsole.log(data);`);
+  parts.push(`});\n\n// Read text so empty and non-JSON responses also work.\nconst data = await response.text();\nconsole.log(data);`);
   return parts.join('\n');
 }
 
@@ -74,20 +70,22 @@ export function buildCurlCommand(
   headers: { key: string; value: string }[],
   body: string,
 ): string {
-  const parts = [`curl -X ${method}`];
+  const error = getHeadersError(headers);
+  if (error) throw new Error(error);
+  const quote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+  const parts = [`curl --globoff ${method.toUpperCase() === 'HEAD' ? '--head' : `-X ${quote(method)}`}`];
 
   for (const h of headers) {
     if (h.key.trim()) {
-      parts.push(`  -H '${h.key.trim()}: ${h.value.trim()}'`);
+      parts.push(`  -H ${quote(`${h.key.trim()}: ${h.value.trim()}`)}`);
     }
   }
 
-  if (body.trim() && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-    const escaped = body.trim().replace(/'/g, "'\\''");
-    parts.push(`  -d '${escaped}'`);
+  if (body.length > 0 && !['GET', 'HEAD'].includes(method.toUpperCase())) {
+    parts.push(`  --data-raw ${quote(body)}`);
   }
 
-  parts.push(`  '${url}'`);
+  parts.push(`  --url ${quote(url)}`);
 
   return parts.join(' \\\n');
 }
